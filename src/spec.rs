@@ -1,7 +1,8 @@
-use std::ops::Index;
+use std::{ops::Index, usize};
 
 use crate::{grain::Grain, matrix::Matrix};
 use halo2curves::FieldExt;
+use serde::{ser::SerializeStruct, Serialize};
 
 /// `State` is structure `T` sized field elements that are subjected to
 /// permutation
@@ -72,6 +73,19 @@ pub struct Spec<F: FieldExt, const T: usize, const RATE: usize> {
     pub(crate) constants: OptimizedConstants<F, T>,
 }
 
+impl<F: FieldExt, const T: usize, const RATE: usize> Serialize for Spec<F, T, RATE> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let mut state = serializer.serialize_struct("Spec", 3)?;
+        state.serialize_field("constants", self.constants())?;
+        state.serialize_field("r_f", &self.r_f())?;
+        state.serialize_field("mds_matrices", self.mds_matrices())?;
+        state.end()
+    }
+}
+
 impl<F: FieldExt, const T: usize, const RATE: usize> Spec<F, T, RATE> {
     /// Number of full rounds
     pub fn r_f(&self) -> usize {
@@ -95,6 +109,46 @@ pub struct OptimizedConstants<F: FieldExt, const T: usize> {
     pub(crate) start: Vec<[F; T]>,
     pub(crate) partial: Vec<F>,
     pub(crate) end: Vec<[F; T]>,
+}
+
+impl<F: FieldExt, const T: usize> Serialize for OptimizedConstants<F, T> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        // prepare
+        let start_constants: Vec<Vec<Vec<u8>>> = self
+            .start()
+            .iter()
+            .map(|elements| {
+                elements
+                    .iter()
+                    .map(|f| f.to_repr().as_ref().to_vec())
+                    .collect()
+            })
+            .collect();
+        let end_constants: Vec<Vec<Vec<u8>>> = self
+            .end()
+            .iter()
+            .map(|elements| {
+                elements
+                    .iter()
+                    .map(|f| f.to_repr().as_ref().to_vec())
+                    .collect()
+            })
+            .collect();
+        let partial_constants: Vec<Vec<u8>> = self
+            .partial()
+            .iter()
+            .map(|f| f.to_repr().as_ref().to_vec())
+            .collect();
+
+        let mut state = serializer.serialize_struct("constants", 3)?;
+        state.serialize_field("start", &start_constants)?;
+        state.serialize_field("end", &end_constants)?;
+        state.serialize_field("partial", &partial_constants)?;
+        state.end()
+    }
 }
 
 impl<F: FieldExt, const T: usize> OptimizedConstants<F, T> {
@@ -124,6 +178,19 @@ pub struct MDSMatrices<F: FieldExt, const T: usize, const RATE: usize> {
     pub(crate) sparse_matrices: Vec<SparseMDSMatrix<F, T, RATE>>,
 }
 
+impl<F: FieldExt, const T: usize, const RATE: usize> Serialize for MDSMatrices<F, T, RATE> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let mut state = serializer.serialize_struct("mdsMatrices", 3)?;
+        state.serialize_field("mds", self.mds())?;
+        state.serialize_field("mds", self.pre_sparse_mds())?;
+        state.serialize_field("mds", self.sparse_matrices())?;
+        state.end()
+    }
+}
+
 impl<F: FieldExt, const T: usize, const RATE: usize> MDSMatrices<F, T, RATE> {
     /// Returns original MDS matrix
     pub fn mds(&self) -> &MDSMatrix<F, T, RATE> {
@@ -144,6 +211,22 @@ impl<F: FieldExt, const T: usize, const RATE: usize> MDSMatrices<F, T, RATE> {
 /// `MDSMatrix` is applied to `State` to achive linear layer of Poseidon
 #[derive(Clone, Debug)]
 pub struct MDSMatrix<F: FieldExt, const T: usize, const RATE: usize>(pub(crate) Matrix<F, T>);
+
+impl<F: FieldExt, const T: usize, const RATE: usize> Serialize for MDSMatrix<F, T, RATE> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let matrix: Vec<Vec<Vec<u8>>> = self
+            .0
+             .0
+            .iter()
+            .map(|row| row.iter().map(|f| f.to_repr().as_ref().to_vec()).collect())
+            .collect();
+
+        serializer.serialize_some(&matrix)
+    }
+}
 
 impl<F: FieldExt, const T: usize, const RATE: usize> Index<usize> for MDSMatrix<F, T, RATE> {
     type Output = [F; T];
@@ -272,6 +355,29 @@ impl<F: FieldExt, const T: usize, const RATE: usize> SparseMDSMatrix<F, T, RATE>
     }
 }
 
+impl<F: FieldExt, const T: usize, const RATE: usize> Serialize for SparseMDSMatrix<F, T, RATE> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let row: Vec<Vec<u8>> = self
+            .row
+            .into_iter()
+            .map(|f| f.to_repr().as_ref().to_vec())
+            .collect();
+        let col_hat: Vec<Vec<u8>> = self
+            .col_hat
+            .into_iter()
+            .map(|f| f.to_repr().as_ref().to_vec())
+            .collect();
+
+        let mut state = serializer.serialize_struct("sparseMDSMatrix", 2)?;
+        state.serialize_field("row", &row)?;
+        state.serialize_field("col_hat", &col_hat)?;
+        state.end()
+    }
+}
+
 impl<F: FieldExt, const T: usize, const RATE: usize> From<MDSMatrix<F, T, RATE>>
     for SparseMDSMatrix<F, T, RATE>
 {
@@ -396,10 +502,11 @@ impl<F: FieldExt, const T: usize, const RATE: usize> Spec<F, T, RATE> {
 
 #[cfg(test)]
 pub(super) mod tests {
-    use halo2curves::FieldExt;
-
     use super::MDSMatrix;
     use crate::grain::Grain;
+    use crate::Spec;
+    use halo2curves::{bn256::Fr, FieldExt};
+    use serde_json;
 
     /// We want to keep unoptimized parameters to cross test with optimized one
     pub(crate) struct SpecRef<F: FieldExt, const T: usize, const RATE: usize> {
@@ -419,6 +526,20 @@ pub(super) mod tests {
                 mds,
                 constants,
             }
+        }
+    }
+
+    const R_F: usize = 8;
+    const R_P: usize = 10;
+    const T: usize = 17;
+    const RATE: usize = 16;
+
+    #[test]
+    fn test1() {
+        {
+            let spec = Spec::<Fr, T, RATE>::new(R_F, R_P);
+            let f = serde_json::to_string(&spec).expect("Should work!");
+            println!("{}", f);
         }
     }
 }
