@@ -2,6 +2,11 @@ use crate::spec::{Spec, State};
 use halo2curves::FieldExt;
 
 impl<F: FieldExt, const T: usize, const RATE: usize> Spec<F, T, RATE> {
+    /// Useless
+    pub fn print_state(&self, state: &State<F, T>) {
+        state.0.iter().for_each(|f| println!("{:#?}", f))
+    }
+
     /// Applies the Poseidon permutation to the given state
     pub fn permute(&self, state: &mut State<F, T>) {
         let r_f = self.r_f / 2;
@@ -14,9 +19,10 @@ impl<F: FieldExt, const T: usize, const RATE: usize> Spec<F, T, RATE> {
                 state.add_constants(round_constants);
                 self.mds_matrices.mds.apply(state);
             }
+
             state.sbox_full();
             state.add_constants(self.constants.start.last().unwrap());
-            self.mds_matrices.pre_sparse_mds.apply(state)
+            self.mds_matrices.pre_sparse_mds.apply(state);
         }
 
         // Partial rounds
