@@ -78,10 +78,13 @@ impl<F: FieldExt, const T: usize, const RATE: usize> Serialize for Spec<F, T, RA
     where
         S: serde::Serializer,
     {
-        let mut state = serializer.serialize_struct("Spec", 3)?;
+        let mut state = serializer.serialize_struct("Spec", 6)?;
+        state.serialize_field("rF", &self.r_f())?;
+        state.serialize_field("rP", &self.constants.partial.len())?;
+        state.serialize_field("t", &T)?;
+        state.serialize_field("rate", &RATE)?;
         state.serialize_field("constants", self.constants())?;
-        state.serialize_field("r_f", &self.r_f())?;
-        state.serialize_field("mds_matrices", self.mds_matrices())?;
+        state.serialize_field("mdsMatrices", self.mds_matrices())?;
         state.end()
     }
 }
@@ -185,8 +188,8 @@ impl<F: FieldExt, const T: usize, const RATE: usize> Serialize for MDSMatrices<F
     {
         let mut state = serializer.serialize_struct("mdsMatrices", 3)?;
         state.serialize_field("mds", self.mds())?;
-        state.serialize_field("mds", self.pre_sparse_mds())?;
-        state.serialize_field("mds", self.sparse_matrices())?;
+        state.serialize_field("preSparseMds", self.pre_sparse_mds())?;
+        state.serialize_field("sparseMatrices", self.sparse_matrices())?;
         state.end()
     }
 }
@@ -373,7 +376,7 @@ impl<F: FieldExt, const T: usize, const RATE: usize> Serialize for SparseMDSMatr
 
         let mut state = serializer.serialize_struct("sparseMDSMatrix", 2)?;
         state.serialize_field("row", &row)?;
-        state.serialize_field("col_hat", &col_hat)?;
+        state.serialize_field("colHat", &col_hat)?;
         state.end()
     }
 }
@@ -539,7 +542,7 @@ pub(super) mod tests {
         {
             let spec = Spec::<Fr, T, RATE>::new(R_F, R_P);
             std::fs::write(
-                "output/spec_values.json",
+                "target/spec_values.json",
                 serde_json::to_string_pretty(&spec).expect("Serialization of spec values failed"),
             )
             .expect("Writing spec_values to output file failed");
