@@ -535,11 +535,14 @@ pub(super) mod tests {
     const RATE: usize = 16;
 
     #[test]
-    fn test1() {
+    fn test_save_constants() {
         {
             let spec = Spec::<Fr, T, RATE>::new(R_F, R_P);
-            let f = serde_json::to_string(&spec).expect("Should work!");
-            println!("{}", f);
+            std::fs::write(
+                "output/spec_values.json",
+                serde_json::to_string_pretty(&spec).expect("Serialization of spec values failed"),
+            )
+            .expect("Writing spec_values to output file failed");
         }
     }
 }
